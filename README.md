@@ -17,3 +17,5 @@ Work in conjuction with the following custom sensor
       device_class: gas
       state_class: total_increasing
 ```
+
+to run this script in homeassistant (from automation) I use Pyscript in HACS (https://houches.local/hacs/repository/283847957) 
