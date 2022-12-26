@@ -12,14 +12,18 @@ from datetime import datetime, timedelta
 # Global values
 #################
 
-__DEBUG__ = False
-
 GAZPAR_SENSOR_NAME = 'sensor.gazpar'
 STATISTICS_SENSOR_NAME = 'sensor.gas_volume'
 
 #################
 # Helper classes
 #################
+
+class LOG_LEVEL():
+    info = 1
+    warning = 2
+    error = 3
+    debug = 4
 
 
 class UPDATE_MODE():
@@ -36,12 +40,19 @@ class MaxFromPreviousDays:
         self.maxState = maxState
 
 
-def print_log(msg, error=False):
+def print_log(msg, level=LOG_LEVEL.info):
     try:
-        if error:
-            log.error(msg)
-        else:
+        if level == LOG_LEVEL.info:
             log.info(msg)
+        elif level == LOG_LEVEL.warning:
+            log.warning(msg)
+        elif level == LOG_LEVEL.error:
+            log.error(msg)
+        elif level == LOG_LEVEL.debug:
+            log.debug(msg)
+        else:
+            log.warning("unmanaged log level for next message....")
+            log.warning(msg)
     except NameError:
         print(msg)
 
@@ -52,17 +63,15 @@ def print_log(msg, error=False):
 
 def getMetadataID(session, sensorName):
 
-    print_log("seqrch for metadata_id")
+    print_log("search for metadata_id",LOG_LEVEL.debug)
     
     res = session.query(StatisticsMeta).filter_by(statistic_id=sensorName)
     
     if res.count() < 1:
-        print_log(f"{sensorName} not found in table Statistics", True)
-        exit
+        print_log(f"{sensorName} not found in table Statistics.", LOG_LEVEL.error)
+        return
     
-    result = res[0].id
-    
-    return result
+    return res[0].id
 
 
 def getMaxSum(metadataID, dt):
@@ -78,8 +87,7 @@ def getMaxSum(metadataID, dt):
             maxSum = row.maxSum
             maxState = row.maxState
     
-    if (__DEBUG__):
-        print_log(f"Sum for {dt} is {maxSum} {maxState} ")
+    print_log(f"Sum for {dt} is {maxSum} {maxState} ", LOG_LEVEL.debug)
     
     return MaxFromPreviousDays(maxSum, maxState)
 
@@ -97,8 +105,7 @@ def update_statistics(updateMode, metadataID, dt, previsousMaxs: MaxFromPrevious
 
     sql = f"update statistics set sum={newSum}, state={newState} where metadata_id ={metadataID} and STRFTIME('%Y/%m/%d', start) {signe} '{dt}' "
 
-    if (__DEBUG__):
-        print_log(sql)
+    print_log(sql, LOG_LEVEL.debug)
 
     with engine.connect() as connection:
         with connection.begin():
@@ -108,8 +115,7 @@ def update_statistics(updateMode, metadataID, dt, previsousMaxs: MaxFromPrevious
 def init_bd_connection():
     global engine, State, Statistics, StatisticsMeta,  StateAttributes
 
-    if (__DEBUG__):
-        print_log("initializing sql objects")
+    print_log("initializing sql objects", LOG_LEVEL.debug)
 
     engine = create_engine('sqlite:///./home-assistant_v2.db', echo=False)
 
@@ -121,37 +127,46 @@ def init_bd_connection():
     StatisticsMeta = Base.classes.statistics_meta
     StateAttributes = Base.classes.state_attributes
 
-
 @service
-def gazpar_update_history():
+def gazpar_update_history(gazpar_sensor_name=None, statistics_sensor_name=None):
 
     # Hassio task name
     task.unique("gazpar_update_history")
-
+    # check parameters
+    if (gazpar_sensor_name is not None):
+        gazparSensorName = gazpar_sensor_name
+    else:
+        gazparSensorName = GAZPAR_SENSOR_NAME
+    if (statistics_sensor_name is not None):
+        statisticsSensorName = statistics_sensor_name
+    else:
+        statisticsSensorName = STATISTICS_SENSOR_NAME
+    print_log(f"Param used: Gazpar Sensor={gazparSensorName}, Statistics Sensor={statisticsSensorName}",LOG_LEVEL.info)
     # Create bd engine
     init_bd_connection()
 
     #Get attributes_id
     session = Session(engine)
-    metadataID = getMetadataID(session, STATISTICS_SENSOR_NAME)
-    if (__DEBUG__):
-        print_log(f"metadata ID = {metadataID}")
-    res = session.query(State).\
-        filter_by(entity_id=GAZPAR_SENSOR_NAME).\
-        order_by(State.last_updated.desc())
+    metadataID = getMetadataID(session, statisticsSensorName)
+    if (metadataID is None):
+        print_log("metadata ID not found. Job ended.", LOG_LEVEL.error)
+        return
+
+    print_log(f"metadata ID = {metadataID}", LOG_LEVEL.debug)
+
+    res = session.query(State).filter_by(entity_id=gazparSensorName).order_by(State.last_updated.desc())
     if res.count() < 1:
-        print_log(f"{GAZPAR_SENSOR_NAME} not found in state table State", True)
-        exit
+        print_log(f"{gazparSensorName} not found in state table State. Job ended.", LOG_LEVEL.error)
+        return
     attributesId = res[0].attributes_id
 
     # Get full attributes
-    if (__DEBUG__):
-        print_log(f"gazpar attributes_Id={attributesId}")
-    res = session.query(StateAttributes).\
-        filter_by(attributes_id=attributesId)
+    print_log(f"gazpar attributes_Id={attributesId}", LOG_LEVEL.debug)
+
+    res = session.query(StateAttributes).filter_by(attributes_id=attributesId)
     if res.count() < 1:
-        print_log(f"{attributesId} not found in state table state_attributes", True)
-        exit
+        print_log(f"{attributesId} not found in state table state_attributes. job ended.", LOG_LEVEL.error)
+        return
 
     # Transform gazpar attribute to JSON
     sharedAttrs = json.loads(res[0].shared_attrs)
@@ -170,8 +185,6 @@ def gazpar_update_history():
         maxs = getMaxSum(metadataID, dtTimePeriod)
         # Calculate new sum
         delta = d["end_index_m3"] - d["start_index_m3"]
-        if (__DEBUG__):
-            print_log(f"{dtTimePeriod} {d['start_index_m3']} {d['end_index_m3']} {delta} ")
         # Update
         update_statistics(UPDATE_MODE.fixedDate, metadataID, dtTimePeriod, maxs, d["end_index_m3"])
     
