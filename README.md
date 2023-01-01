@@ -6,6 +6,7 @@ This scrip is a workarround
 
 Work in conjuction with the following custom sensor 
 
+**Warning : this version of the script works only with statistics 'volume of Gas in cubic meters'**
 
 ```
   - sensor:
