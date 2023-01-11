@@ -6,8 +6,6 @@ This sensor can be used in Energy dashboard.
 
 Work in conjuction with gazpar sensor (https://github.com/ssenart/home-assistant-gazpar)
 
-Note: No sensor is created. Just statistics. If we create also a sensor, it will be managed by standard homeassistant statistics process - one status per hour.  
-This is not what we want as Gazpar values appears with at least 2 days delay.
 
 ### fields:
 * gazpar_sensor_name:
@@ -18,12 +16,17 @@ This is not what we want as Gazpar values appears with at least 2 days delay.
      description: Name of the history sensor containing statistics. Default=gazpar_statistics
      example: gazpar_statistics
      required: false
-
+ * domain_name:
+     description: Domain name of the sensor. The sensor will be <domain_name>:<history_sensor_name>
+     example: gazpar_statistics
+     required: false
+     
 ### Logic
 * Each time the sensor.gazpar is changed, an automation calls the service (service: pyscript.gazpar_insert_statistics). The script checks the latest date in statistics table and insert a new line is the date (time_period in list dqily. bellow). 
 
+
 ```
-sensor.gazpar attribute
+sensor.gazpar attribute sample data
     attribution: Data provided by GrDF
     version: 1.3.4
     username: xxxxxxxxxxxxxxxxxxxxxxxx
@@ -55,8 +58,24 @@ sensor.gazpar attribute
       type: Mesuré
 ```
 
+based on homeassistant async_add_external_statistics
+```
+@callback
+def async_add_external_statistics(
+    hass: HomeAssistant,
+    metadata: StatisticMetaData,
+    statistics: Iterable[StatisticData],
+) -> None:
+    """Add hourly statistics from an external source.
+    This inserts an import_statistics job in the recorder's queue.
+    """
+```
+
+to run this script in homeassistant (from automation) I use Pyscript in HACS https://github.com/custom-components/pyscript
+
 
 ## gazpar_update_history.py
+(OLD APPROACH)
 Python script for home assistant; update SQL table 'history' based on "time_period" attribute in sensor.gazpar. 
 Gazpar usualy delivers the value wuth a two or tree days delay. 
 This scrip is a workarround
@@ -75,5 +94,3 @@ Work in conjuction with the following custom sensor
       device_class: gas
       state_class: total_increasing
 ```
-
-to run this script in homeassistant (from automation) I use Pyscript in HACS https://github.com/custom-components/pyscript
