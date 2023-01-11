@@ -1,4 +1,61 @@
 # homeAssistant
+## gazpar_insert_statistics.py
+Python script for home assistant; Insert a long term statistic entry (in SQL table statistics) based on Gazpar daily values. 
+
+This sensor can be used in Energy dashboard.
+
+Work in conjuction with gazpar sensor (https://github.com/ssenart/home-assistant-gazpar)
+
+Note: No sensor is created. Just statistics. If we create also a sensor, it will be managed by standard homeassistant statistics process - one status per hour.  
+This is not what we want as Gazpar values appears with at least 2 days delay.
+
+### fields:
+* gazpar_sensor_name:
+     description: Name of the sensor containing gazpar attributes. Default=sensor.gazpar
+     example: sensor.gazpark
+     required: false
+* history_sensor_name:
+     description: Name of the history sensor containing statistics. Default=gazpar_statistics
+     example: gazpar_statistics
+     required: false
+
+### Logic
+* Each time the sensor.gazpar is changed, an automation calls the service (service: pyscript.gazpar_insert_statistics). The script checks the latest date in statistics table and insert a new line is the date (time_period in list dqily. bellow). 
+
+```
+sensor.gazpar attribute
+    attribution: Data provided by GrDF
+    version: 1.3.4
+    username: xxxxxxxxxxxxxxxxxxxxxxxx
+    pce: xxxxxxxxxxxxxxxxxxxxxxxx
+    unit_of_measurement: kWh
+    friendly_name: Gazpar
+    icon: mdi:fire
+    device_class: energy
+    state_class: total_increasing
+    errorMessages: 
+    hourly: 
+    daily: 
+    - time_period: 08/01/2023
+      start_index_m3: 522
+      end_index_m3: 526
+      volume_m3: 3
+      energy_kwh: 39
+      converter_factor_kwh/m3: 11.2
+      temperature_degC: 8.21
+      type: Mesuré
+      timestamp: '2023-01-11T16:09:52.818042'
+    - time_period: 07/01/2023
+      start_index_m3: 516
+      end_index_m3: 522
+      volume_m3: 6
+      energy_kwh: 65
+      converter_factor_kwh/m3: 11.2
+      temperature_degC: 9.46
+      type: Mesuré
+```
+
+
 ## gazpar_update_history.py
 Python script for home assistant; update SQL table 'history' based on "time_period" attribute in sensor.gazpar. 
 Gazpar usualy delivers the value wuth a two or tree days delay. 
