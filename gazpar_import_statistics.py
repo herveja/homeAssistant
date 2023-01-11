@@ -3,14 +3,15 @@ from homeassistant.const import (UnitOfEnergy)
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 from homeassistant.components.recorder.statistics import (
     get_last_statistics,
-    async_import_statistics
+    async_add_external_statistics
     )
 import datetime
 import logging
 
 
-
-
+#################
+# Helper classes
+################# 
 _LOGGER = logging.getLogger(__name__)
 
 class DAILY_STAT:
@@ -20,7 +21,7 @@ class DAILY_STAT:
 
 
 @service
-async def gazpar_insert_statistics(history_sensor_name = 'gazpar_statistics', gazpar_sensor_name = 'sensor.gazpar'):
+async def gazpar_insert_statistics(history_sensor_name = 'gazpar_statistics', gazpar_sensor_name = 'sensor.gazpar', domain_name='gazpar'):
     """yaml
 name: gazpar_insert_statistics
 description: Insert a long term statistic entry based on Gazpar daily values. 
@@ -33,23 +34,17 @@ fields:
      description: Name of the history sensor containing statistics. Default=gazpar_statistics
      example: gazpar_statistics
      required: false
+  domain_name:
+     description: Domain name of the sensor. The sensor will be <domain_name>:<history_sensor_name>
+     example: gazpar_statistics
+     required: false
 """    
-# No sensor is created. Just statistics. This sensor can be used in Energy dashboard. Nota if we create also a sensor, it will be managed by standard homeassistant statistics process - one status per hour.  This is not what we want as Gazpar values appears with at least 2 days delay.
-
     # Hassio task name
     task.unique("gazpar_insert_statistics")
      
     delta_attribute = "energy_kwh"
 
-    statistic_id = f"sensor.{history_sensor_name}".lower()
-
-    # state.set(statistic_id, 0, {
-    #         "icon" : "mdi:alpha-w" ,
-    #         "unit_of_measurement" : "{}".format(UnitOfEnergy.KILO_WATT_HOUR) ,
-    #         "device_class" : "energy" ,
-    #         "state_class" : "total_increasing" ,
-    #         "friendly_name" : "{}".format("GAZPAR friendlyName"),
-    #          })
+    statistic_id = f"{domain_name}:{history_sensor_name}".lower()
 
     last_stats = await homeassistant.components.recorder.get_instance(hass).async_add_executor_job(
         get_last_statistics, hass, 1, statistic_id, True, {'state','sum'}
@@ -66,8 +61,6 @@ fields:
                 last_date = last_stats[statistic_id][0]['start']
 
     _LOGGER.info(f"[****GAZPAR****] LAST SUM={last_sum} LAST_DATE={last_date} ")
-
-
     _LOGGER.info(f"[****GAZPAR****] ------------------------")
 
     try:
@@ -77,7 +70,12 @@ fields:
         return
 
     # prepare list of stat to be inserted
-    metadata = StatisticMetaData(has_mean=False, has_sum=True, name=history_sensor_name, source='recorder', statistic_id=statistic_id,  unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR )
+    metadata = StatisticMetaData(has_mean=False, has_sum=True, 
+                name=history_sensor_name,
+                source=domain_name,
+                statistic_id=statistic_id,
+                unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR )
+
     statistics = []
 
     # Sort time_period desc
@@ -107,8 +105,6 @@ fields:
 
     if (len(statistics)>0):       
        _LOGGER.info(f"adding {len(statistics)} statistics for column {statistic_id}")
-       async_import_statistics(hass, metadata, statistics)
+       async_add_external_statistics(hass , metadata, statistics)
 
     _LOGGER.info(f"[****GAZPAR****] --------THE---END-------")
-
-
