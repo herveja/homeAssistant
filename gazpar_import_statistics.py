@@ -19,16 +19,20 @@ class DAILY_STAT:
     MIN = 0
     SEC = 0
 
+VOLUME_ENERGY = {'volume': 'volume_m3', 'energy': 'energy_kwh'}
 
+#################
+# gazpar_insert_statistics
+################# 
 @service
-async def gazpar_insert_statistics(history_sensor_name = 'gazpar_statistics', gazpar_sensor_name = 'sensor.gazpar', domain_name='gazpar'):
+async def gazpar_insert_statistics(history_sensor_name = 'gazpar_statistics', gazpar_sensor_name = 'sensor.gazpar', domain_name='gazpar', volume_or_energy='energy'):
     """yaml
 name: gazpar_insert_statistics
 description: Insert a long term statistic entry based on Gazpar daily values. 
 fields:
   gazpar_sensor_name:
      description: Name of the sensor containing gazpar attributes. Default=sensor.gazpar
-     example: sensor.gazpark
+     example: sensor.gazpar
      required: false
   history_sensor_name:
      description: Name of the history sensor containing statistics. Default=gazpar_statistics
@@ -36,13 +40,28 @@ fields:
      required: false
   domain_name:
      description: Domain name of the sensor. The sensor will be <domain_name>:<history_sensor_name>
-     example: gazpar_statistics
+     example: gazpar
+     required: false
+  volume_or_energy:
+     description: Specify wether it add statistics based on volume (gazpar volume_m3 attribute) or energy (gazpar energy_kwh attribute)
+     example: energy
      required: false
 """    
     # Hassio task name
     task.unique("gazpar_insert_statistics")
-     
-    delta_attribute = "energy_kwh"
+
+    # HomeAssistant global  hass
+    global hass
+
+    # parameters ?
+    _LOGGER.info(f"history_sensor_name={history_sensor_name}, gazpar_sensor_name={gazpar_sensor_name}, domain_name={domain_name}, volume_or_energy={volume_or_energy}")
+    # check parameters
+    if (volume_or_energy not in VOLUME_ENERGY):
+        _LOGGER.error(f'Invalide volume_or_energy parameter. Found {volume_or_energy}. Shoulbe in {VOLUME_ENERGY} ')
+        return
+
+    delta_attribute = VOLUME_ENERGY[volume_or_energy]
+    _LOGGER.info(f"Attribute used for {volume_or_energy} = {delta_attribute} ")
 
     statistic_id = f"{domain_name}:{history_sensor_name}".lower()
 
@@ -60,13 +79,13 @@ fields:
                 last_sum = int(last_sum)
                 last_date = last_stats[statistic_id][0]['start']
 
-    _LOGGER.info(f"[****GAZPAR****] LAST SUM={last_sum} LAST_DATE={last_date} ")
-    _LOGGER.info(f"[****GAZPAR****] ------------------------")
+    _LOGGER.info(f"LAST SUM={last_sum} LAST_DATE={last_date} ")
+    _LOGGER.info(f"------------------------")
 
     try:
         daily = state.get(f"{gazpar_sensor_name}.daily")
     except:
-        _LOGGER.error(f"[****GAZPAR****]  Error: gazpar sensor not found (sensor.gazpar.daily) ")
+        _LOGGER.error(f" Error: gazpar sensor not found ({gazpar_sensor_name}.daily) ")
         return
 
     # prepare list of stat to be inserted
@@ -97,14 +116,14 @@ fields:
             last_sum += new_state
             new_sum = last_sum
 
-            _LOGGER.info(f"[****GAZPAR****] Daily Date={dt} Delta={new_state} sum={new_sum} ")
+            _LOGGER.info(f"Daily Date={dt} Delta={new_state} sum={new_sum} ")
             # add to list
             statistics.append(StatisticData(start=dt, state=new_state, sum=new_sum))
         else:
-            _LOGGER.info(f"[****GAZPAR****] Date skipped {dt} ")
+            _LOGGER.info(f"Date skipped {dt} ")
 
     if (len(statistics)>0):       
        _LOGGER.info(f"adding {len(statistics)} statistics for column {statistic_id}")
        async_add_external_statistics(hass , metadata, statistics)
 
-    _LOGGER.info(f"[****GAZPAR****] --------THE---END-------")
+    _LOGGER.info(f"--------THE---END-------")
