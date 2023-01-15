@@ -1,5 +1,5 @@
 import homeassistant.components.recorder
-from homeassistant.const import (UnitOfEnergy)
+from homeassistant.const import (UnitOfEnergy, UnitOfVolume)
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 from homeassistant.components.recorder.statistics import (
     get_last_statistics,
@@ -19,7 +19,10 @@ class DAILY_STAT:
     MIN = 0
     SEC = 0
 
-VOLUME_ENERGY = {'volume': 'volume_m3', 'energy': 'energy_kwh'}
+VOLUME_ENERGY = {
+    'volume': {'attribute': 'volume_m3', 'unit_of_energy': UnitOfVolume.CUBIC_METERS},
+    'energy': {'attribute': 'energy_kwh', 'unit_of_energy': UnitOfEnergy.KILO_WATT_HOUR }
+    }
 
 #################
 # gazpar_insert_statistics
@@ -59,19 +62,24 @@ fields:
     if (volume_or_energy not in VOLUME_ENERGY):
         _LOGGER.error(f'Invalide volume_or_energy parameter. Found {volume_or_energy}. Shoulbe in {VOLUME_ENERGY} ')
         return
+    
+    # defines what attribute and unit to use - based on parameters
+    delta_attribute = VOLUME_ENERGY[volume_or_energy]['attribute']
+    statistics_unit = VOLUME_ENERGY[volume_or_energy]['unit_of_energy']
+    _LOGGER.info(f"Attribute used for {volume_or_energy} = {delta_attribute} statistics_unit={statistics_unit} ")
 
-    delta_attribute = VOLUME_ENERGY[volume_or_energy]
-    _LOGGER.info(f"Attribute used for {volume_or_energy} = {delta_attribute} ")
-
+    # defines staittics name (sensor name)
     statistic_id = f"{domain_name}:{history_sensor_name}".lower()
 
+    # search for the latest statistics (date & last sum)
     last_stats = await homeassistant.components.recorder.get_instance(hass).async_add_executor_job(
         get_last_statistics, hass, 1, statistic_id, True, {'state','sum'}
         )
-    
+    # default value if no match
     last_sum = 0
     last_date = datetime.datetime(year=1900, month=1, day=1,hour=0, minute=0, second=0, microsecond=0, tzinfo=datetime.timezone.utc)
 
+    # do we have match (existing stats ?)
     if (last_stats is not None):
         if (len(last_stats) != 0):
             last_sum = last_stats[statistic_id][0]['sum']
@@ -82,6 +90,7 @@ fields:
     _LOGGER.info(f"LAST SUM={last_sum} LAST_DATE={last_date} ")
     _LOGGER.info(f"------------------------")
 
+    # get gazpar sensor
     try:
         daily = state.get(f"{gazpar_sensor_name}.daily")
     except:
@@ -93,11 +102,11 @@ fields:
                 name=history_sensor_name,
                 source=domain_name,
                 statistic_id=statistic_id,
-                unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR )
+                unit_of_measurement=statistics_unit )
 
     statistics = []
 
-    # Sort time_period desc
+    # Sort gazpar time_period desc
     sorted_list = sorted(daily , key=lambda t: datetime.datetime.strptime(t['time_period'], '%d/%m/%Y'))
     dtTimePeriod = ""
     
@@ -122,6 +131,7 @@ fields:
         else:
             _LOGGER.info(f"Date skipped {dt} ")
 
+    # if we have stat to insert... go
     if (len(statistics)>0):       
        _LOGGER.info(f"adding {len(statistics)} statistics for column {statistic_id}")
        async_add_external_statistics(hass , metadata, statistics)
