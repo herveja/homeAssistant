@@ -58,7 +58,28 @@ sensor.gazpar attribute sample data
       type: Mesuré
 ```
 
-based on homeassistant async_add_external_statistics
+sample Automation to fire the script each time gazpar sensor is updated
+```
+alias: "[gazpar] Insert Statistics"
+description: ""
+trigger:
+  - platform: state
+    entity_id:
+      - sensor.gazpar
+condition: []
+action:
+  - service: pyscript.gazpar_insert_statistics
+    data:
+      gazpar_sensor_name: sensor.gazpar
+      history_sensor_name: gazpar_statistics
+      domain_name: gazpar
+      volume_or_energy: energy
+  - service: pyscript.gazpar_insert_statistics
+```
+
+To run this script in homeassistant (from automation) I use Pyscript in HACS https://github.com/custom-components/pyscript
+
+This python script is using homeassistant internal methode async_add_external_statistics (https://github.com/home-assistant/core/pull/56607)
 ```
 @callback
 def async_add_external_statistics(
@@ -71,11 +92,13 @@ def async_add_external_statistics(
     """
 ```
 
-to run this script in homeassistant (from automation) I use Pyscript in HACS https://github.com/custom-components/pyscript
 
+## myenedis_insert_statistics.py
+
+Same as gazpar_insert_statistics.py but for MyEnedis (https://github.com/saniho/apiEnedis). Create long-term statistics based on dailyweek, dailyweek_HP, dailyweek_HC attribute of sensor.myenedis_xxxxxxxx so that the power consumption is accurately reported to the exact day in Energy dashboard 
 
 ## gazpar_update_history.py
-(OLD APPROACH)
+(OLD APPROACH)(DECREPATED)
 Python script for home assistant; update SQL table 'history' based on "time_period" attribute in sensor.gazpar. 
 Gazpar usualy delivers the value wuth a two or tree days delay. 
 This scrip is a workarround
